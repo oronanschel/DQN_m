@@ -140,6 +140,13 @@ def process_args(args, defaults, description):
                         type=str, default="",
                         help='Name of pkl files destination (within models/)')
 
+    parser.add_argument('--heads_num', dest="heads_num",
+                        type=int, default=defaults.HEADS_NUM,
+                        help='number of bootstrap heads')
+
+    parser.add_argument('--p', dest="p",
+                        type=float, default=defaults.P,
+                        help='data sharing parameter')
 
     parameters = parser.parse_args(args)
     print parameters

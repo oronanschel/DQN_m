@@ -1,4 +1,5 @@
 import sys, pdb, time, random, os, cv2, datetime, csv, glob, theano
+
 import numpy as np
 from random import randrange
 #from ale_python_interface import ALEInterface
@@ -142,12 +143,14 @@ class Trainer(object):
       raise NotImplementedError
     return resized
 
-  def get_action(self, epsilon, x):
+  def get_action(self, epsilon, x ,_head = 0,testing=0):
     if np.random.rand() < epsilon:
       return np.random.randint(len(self.legal_actions))
     else:
-      return self.model.predict_move(np.array(x).reshape(1,4,84,84))
-
+      if not testing:
+        return self.model.predict_move(np.array(x).reshape(1,4,84,84),head=_head)
+      else:
+        return self.model.predict_move(np.array(x).reshape(1, 4, 84, 84))
   def save_model(self, total_reward, skip_best=False):
     if total_reward >= self.best_reward and not skip_best:
       self.best_reward = total_reward
@@ -249,18 +252,21 @@ class DQN_Trainer(Trainer):
     x = self._init_ep()
     game_over = self.ale.game_over()
     num_lives = self.ale.lives()
+    playing_head = np.random.randint(self.params.heads_num)
     while not game_over:
       self.frame_count += 1
       epsilon = self.get_epsilon() if not testing else self.params.optimal_eps
-      chosen_action = self.get_action(epsilon, x)
+      chosen_action = self.get_action(epsilon, x,_head=playing_head,testing=testing)
       reward, raw_reward, new_frame = self.act(chosen_action, testing=testing)
 
       game_over = self.ale.game_over() or (self.frame_count-start_frame_count) > max_steps
       new_num_lives = self.ale.lives()
       life_death = (new_num_lives < num_lives and not testing and self.params.death_ends_episode)
       num_lives = new_num_lives
-      
-      data_set.add_sample(x[-1], chosen_action, reward, game_over or life_death)
+
+      mask = np.random.binomial(1, self.params.p, size=[self.params.heads_num])
+      data_set.add_sample(x[-1], chosen_action, reward, game_over or life_death ,mask)
+
       x = get_new_frame(new_frame, x)
       total_reward += raw_reward
       if self.frame_count > self.params.replay_start_size and not testing:
@@ -276,8 +282,8 @@ class DQN_Trainer(Trainer):
 
 
   def learn(self):
-    x, a, r, next_x, term = self.exp_replay.random_batch(self.params.batch_size)
-    td_errors = self.model.train_conv_net(x, next_x, a, r, term)
+    x, a, r, next_x, term , mask = self.exp_replay.random_batch(self.params.batch_size)
+    td_errors = self.model.train_conv_net(x, next_x, a, r, term ,mask)
     return td_errors
 
 class Q_Learning(DQN_Trainer):
@@ -290,7 +296,7 @@ class Q_Learning(DQN_Trainer):
                      {"model_type": "conv", "filter_size": [3,3], "pool": [1,1], "stride": [1,1],
                      "out_size": 64, "activation": "relu"},
                      {"model_type": "mlp", "out_size": 512, "activation": "relu"},
-                     {"model_type": "mlp", "out_size": len(self.legal_actions), "activation": "linear"}]
+                     {"model_type": "mlp", "out_size": len(self.legal_actions)*self.params.heads_num, "activation": "linear"}]
 
     #if self.params.double_q:
     #  model_network[-1]["b"] = None
@@ -299,13 +305,13 @@ class Q_Learning(DQN_Trainer):
     self.model = DeepQNetwork(model_network=model_network, double_q=self.params.double_q,
       learning_method=self.params.update_rule, dnn_type=self.params.USE_DNN_TYPE, clip_delta=self.params.clip_delta,
       input_size=[None,4,84,84], batch_size=self.params.batch_size, learning_params=learning_params, 
-      gamma=self.params.discount)
+      gamma=self.params.discount,heads_num=self.params.heads_num,action_num=len(self.legal_actions))
     if self.params.nn_file is not None:
       self.model.load_params(pkl.load(open(self.params.nn_file, 'r')))
 
     self.exp_replay = DataSet(84, 84, self.rng, max_steps=self.params.replay_memory_size, 
-      phi_length=4)
-    self.test_replay = DataSet(84, 84, self.rng, max_steps=4, phi_length=4)
+      phi_length=4, heads_num=self.params.heads_num)
+    self.test_replay = DataSet(84, 84, self.rng, max_steps=4, phi_length=4,heads_num=self.params.heads_num)
 
 
 models={1:Q_Learning}

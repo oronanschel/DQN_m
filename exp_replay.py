@@ -14,7 +14,7 @@ class DataSet(object):
 actions, and rewards.
 
   """
-  def __init__(self, width, height, rng, max_steps=1000, phi_length=4):
+  def __init__(self, width, height, rng, max_steps=1000, phi_length=4,heads_num = 1):
     """Construct a DataSet.
 
     Arguments:
@@ -34,6 +34,7 @@ actions, and rewards.
     self.max_steps = max_steps
     self.phi_length = phi_length
     self.rng = rng
+    self.heads_num = heads_num
     
 
     # Allocate the circular buffers and indices.
@@ -41,12 +42,13 @@ actions, and rewards.
     self.actions = np.zeros(max_steps, dtype='int32')
     self.rewards = np.zeros(max_steps, dtype=floatX)
     self.terminal = np.zeros(max_steps, dtype='bool')
+    self.masks  = np.zeros((max_steps,heads_num), dtype=floatX)
 
     self.bottom = 0
     self.top = 0
     self.size = 0
 
-  def add_sample(self, img, action, reward, terminal):
+  def add_sample(self, img, action, reward, terminal,mask):
     """Add a time step record.
 
     Arguments:
@@ -60,6 +62,7 @@ actions, and rewards.
     self.actions[self.top] = action
     self.rewards[self.top] = reward
     self.terminal[self.top] = terminal
+    self.masks[self.top] = mask
 
 
     if self.size == self.max_steps:
@@ -112,6 +115,8 @@ next_states for batch_size randomly chosen state transitions.
                 self.height,
                 self.width),
                  dtype='uint8')
+    masks = np.zeros((batch_size,self.heads_num),dtype=floatX)
+
 
     count = 0
     indices = np.zeros((batch_size), dtype='int32')
@@ -140,11 +145,12 @@ next_states for batch_size randomly chosen state transitions.
       next_states[count] = self.imgs.take(transition_indices,
                         axis=0,
                         mode='wrap')
+      masks[count] = self.masks.take(end_index, mode='wrap')
       count += 1
 
     self.last_indices = indices
 
-    return states, actions, rewards, next_states, terminal
+    return states, actions, rewards, next_states, terminal,masks
 
 
 # TESTING CODE BELOW THIS POINT...

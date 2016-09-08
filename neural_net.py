@@ -8,12 +8,16 @@ from nnet import Model
 class DeepQNetwork():
   def __init__(self, model_network=None,gamma=0.99, learning_method="rmsprop", 
     batch_size=32, input_size=None, learning_params=None, dnn_type=True, clip_delta=0, 
-    scale=255., double_q=False, prioritized_exp_replay=False):
+    scale=255., double_q=False, prioritized_exp_replay=False,heads_num = 1,action_num = 0):
+
     x = T.ftensor4()
     next_x = T.ftensor4()
     a = T.ivector()
     r = T.fvector()
     terminal = T.ivector()
+
+    self.heads_num = heads_num
+    self.action_num = action_num
 
     self.x_shared = theano.shared(np.zeros(tuple([batch_size]+input_size[1:]), dtype='float32'))
     self.next_x_shared = theano.shared(np.zeros(tuple([batch_size]+input_size[1:]), dtype='float32'))
@@ -31,13 +35,26 @@ class DeepQNetwork():
       y = r + (T.ones_like(terminal)-terminal)*gamma*\
       self.Q_prime_model.apply(next_x/scale)[T.arange(alt_actions.shape[0]), alt_actions]
     else:
+      q_stack = self.Q_prime_model.apply(next_x / scale)
+      q_list  = [q_stack[T.arange(a.shape[0]),k*self.action_num:(k+1)*self.action_num] for k in range(self.heads_num)]
+      y_list  = [r + (T.ones_like(terminal)-terminal)*gamma*T.max(q_list[k], axis=1) for k in range(self.heads_num)]
+
+
+
+      y_concat = theano.tensor.concatenate(y_list, axis=0)
+
       y = r + (T.ones_like(terminal)-terminal)*gamma*T.max(self.Q_prime_model.apply(next_x/scale), axis=1)
-    
+
+
     all_q_vals = self.Q_model.apply(x/scale)
     q_vals = all_q_vals[T.arange(a.shape[0]), a]
 
-    td_errors = y-q_vals
+    q_vals_list = [all_q_vals[T.arange(a.shape[0]), a+k*self.heads_num] for k in range(self.heads_num)]
+    q_vals_concat = theano.tensor.concatenate(q_vals_list, axis=0)
 
+    # td_errors = y-q_vals
+
+    td_errors = y_concat - q_vals_concat
     """
     if clip_delta > 0:
       td_errors = td_errors.clip(-clip_delta, clip_delta)
@@ -76,6 +93,8 @@ class DeepQNetwork():
     givens = {x:self.x_shared, a:self.a_shared, r:self.r_shared, 
     terminal:self.terminal_shared, next_x:self.next_x_shared}
 
+    # print 'fast compile'
+    # theano.config.mode = 'FAST_COMPILE'
     print "building"
     self.train_model = theano.function([], td_errors, updates=param_updates, givens=givens)
     print "compiled train_model (1/3)"
@@ -86,9 +105,16 @@ class DeepQNetwork():
     self.update_target_params()
     print "updated target params"
 
-  def predict_move(self, x):
+  def predict_move(self, x , head = None):
     self.x_shared.set_value(x)
-    return np.argmax(self.pred_score(), axis=1)
+    if head:
+      return np.argmax(self.pred_score()[0,head*self.action_num : (head+1)*self.action_num])
+    else:
+      all_q_vals  = self.pred_score()
+      q = all_q_vals[0,0:self.action_num]
+      for k in range(1,self.heads_num):
+        q+= all_q_vals[0,k*self.action_num : (k+1)*self.action_num]
+      return np.argmax(q)
 
   def get_q_vals(self, x):
     self.x_shared.set_value(x)

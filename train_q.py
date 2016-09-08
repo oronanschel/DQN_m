@@ -32,15 +32,15 @@ class Defaults:
     RMS_DECAY = .95 # (Rho)
     RMS_EPSILON = .01
     CLIP_DELTA = 1.0
-    EPSILON_START = 1.0
-    EPSILON_MIN = 0.01 #or 0.01 for tuned ddqn
+    EPSILON_START = 0.9
+    EPSILON_MIN = 0.1 #or 0.01 for tuned ddqn
     EPSILON_DECAY = 1000000
     PHI_LENGTH = 4
     UPDATE_FREQUENCY = 4
     REPLAY_MEMORY_SIZE = 1000000
     BATCH_SIZE = 32
     NETWORK_TYPE = "nature_dnn"
-    FREEZE_INTERVAL = 30000 #30000 for tuned ddqn
+    FREEZE_INTERVAL = 10000 #30000 for tuned ddqn
     REPLAY_START_SIZE = 50000 #50000
     RESIZE_METHOD = 'scale' #scale vs crop
     RESIZED_WIDTH = 84
@@ -51,9 +51,16 @@ class Defaults:
     MAX_START_NULLOPS = 30
     DETERMINISTIC = True
     PRED_COST_WEIGHT = 1.0
-    OPTIMAL_EPS = 0.001 #0.05 or 0.001 for tuned ddqn
-    DOUBLE_Q = True
+    OPTIMAL_EPS = 0.05 #0.05 or 0.001 for tuned ddqn
+    DOUBLE_Q = False
     DEEPMODEL = "DQN"
+
+    # ---------------------
+    # Bootstrap params:
+    # ---------------------
+    HEADS_NUM = 10
+    P = 1
+
 
     # ---------------------
     # HeapSum params:
